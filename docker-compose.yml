@@ -1,0 +1,313 @@
+version: "3.9"
+
+networks:
+  ecommerce-net:
+    driver: bridge
+
+volumes:
+  postgres-user-data:
+  postgres-product-data:
+  postgres-order-data:
+  redis-data:
+  rabbitmq-data:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+
+services:
+  # ─── Databases ───────────────────────────────────────────────────────────────
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: postgres-user
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: user_svc
+      POSTGRES_PASSWORD: user_secret
+    volumes:
+      - postgres-user-data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_svc -d userdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-product:
+    image: postgres:16-alpine
+    container_name: postgres-product
+    environment:
+      POSTGRES_DB: productdb
+      POSTGRES_USER: product_svc
+      POSTGRES_PASSWORD: product_secret
+    volumes:
+      - postgres-product-data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product_svc -d productdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-order:
+    image: postgres:16-alpine
+    container_name: postgres-order
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: order_svc
+      POSTGRES_PASSWORD: order_secret
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order_svc -d orderdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes --requirepass redis_secret
+    volumes:
+      - redis-data:/data
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbit_user
+      RABBITMQ_DEFAULT_PASS: rabbit_secret
+    ports:
+      - "15672:15672"   # management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ─── Core Microservices ───────────────────────────────────────────────────────
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres-user
+      DB_PORT: 5432
+      DB_NAME: userdb
+      DB_USER: user_svc
+      DB_PASSWORD: user_secret
+      JWT_SECRET: super_jwt_secret_change_in_prod
+      JWT_EXPIRES_IN: 7d
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DB_HOST: postgres-product
+      DB_PORT: 5432
+      DB_NAME: productdb
+      DB_USER: product_svc
+      DB_PASSWORD: product_secret
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+    depends_on:
+      postgres-product:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  cart-service:
+    build:
+      context: ./cart-service
+      dockerfile: Dockerfile
+    container_name: cart-service
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      REDIS_URL: redis://:redis_secret@redis:6379
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      DB_HOST: postgres-order
+      DB_PORT: 5432
+      DB_NAME: orderdb
+      DB_USER: order_svc
+      DB_PASSWORD: order_secret
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      PAYMENT_SERVICE_URL: http://payment-service:3005
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      STRIPE_SECRET_KEY: sk_test_your_stripe_key_here
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      NODE_ENV: production
+      PORT: 3006
+      RABBITMQ_URL: amqp://rabbit_user:rabbit_secret@rabbitmq:5672
+      SMTP_HOST: smtp.sendgrid.net
+      SMTP_PORT: 587
+      SMTP_USER: apikey
+      SMTP_PASS: your_sendgrid_api_key
+      FROM_EMAIL: noreply@yourstore.com
+      TWILIO_ACCOUNT_SID: your_twilio_sid
+      TWILIO_AUTH_TOKEN: your_twilio_token
+      TWILIO_FROM_NUMBER: +15551234567
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+
+  # ─── API Gateway ──────────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - user-service
+      - product-service
+      - cart-service
+      - order-service
+      - payment-service
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+
+  # ─── Monitoring ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana_secret
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - ecommerce-net
+    restart: unless-stopped

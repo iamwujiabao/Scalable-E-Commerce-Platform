@@ -1,0 +1,103 @@
+{
+  "title": "E-Commerce Platform Overview",
+  "uid": "ecommerce-overview",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[1m])) by (job) / sum(rate(http_requests_total[1m])) by (job)",
+          "legendFormat": "{{job}} error %"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P99 Response Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job)) * 1000",
+          "legendFormat": "{{job}} p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Node.js Heap Used (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "nodejs_heap_size_used_bytes / 1024 / 1024",
+          "legendFormat": "{{instance}} heap MB"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Service Uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            { "color": "red",   "value": 0 },
+            { "color": "green", "value": 1 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "RabbitMQ Messages Ready",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages_ready",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "RabbitMQ Publish Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(rabbitmq_channel_messages_published_total[1m])",
+          "legendFormat": "messages/s"
+        }
+      ]
+    }
+  ]
+}

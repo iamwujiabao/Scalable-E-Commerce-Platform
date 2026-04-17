@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment
+.env
+**/.env
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Build artifacts
+dist/
+build/
+**/dist/
+**/build/
+
+# Test coverage
+coverage/
+**/coverage/
+
+# Docker volumes (local)
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary
+tmp/
+temp/

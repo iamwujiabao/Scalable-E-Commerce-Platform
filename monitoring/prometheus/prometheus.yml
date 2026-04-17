@@ -1,0 +1,80 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: 'production'
+    platform:    'ecommerce'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'user-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['user-service:3001']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'user-service'
+
+  - job_name: 'product-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['product-service:3002']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'product-service'
+
+  - job_name: 'cart-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['cart-service:3003']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'cart-service'
+
+  - job_name: 'order-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['order-service:3004']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'order-service'
+
+  - job_name: 'payment-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['payment-service:3005']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'payment-service'
+
+  - job_name: 'notification-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['notification-service:3006']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'notification-service'
+
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['api-gateway:9113']
